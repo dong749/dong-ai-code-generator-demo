@@ -1,4 +1,4 @@
-package com.dong.dongaicodegenerator.parser;
+package com.dong.dongaicodegenerator.core.parser;
 
 /**
  * 代码解析器策略接口

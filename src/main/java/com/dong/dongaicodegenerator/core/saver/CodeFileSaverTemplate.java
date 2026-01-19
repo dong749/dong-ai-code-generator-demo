@@ -1,4 +1,4 @@
-package com.dong.dongaicodegenerator.saver;
+package com.dong.dongaicodegenerator.core.saver;
 
 import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;

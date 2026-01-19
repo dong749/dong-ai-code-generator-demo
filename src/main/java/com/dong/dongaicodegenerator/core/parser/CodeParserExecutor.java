@@ -1,4 +1,4 @@
-package com.dong.dongaicodegenerator.parser;
+package com.dong.dongaicodegenerator.core.parser;
 
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;

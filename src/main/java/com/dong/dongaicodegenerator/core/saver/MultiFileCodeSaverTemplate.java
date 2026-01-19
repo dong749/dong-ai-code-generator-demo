@@ -1,5 +1,6 @@
-package com.dong.dongaicodegenerator.saver;
+package com.dong.dongaicodegenerator.core.saver;
 
+import cn.hutool.core.util.ObjectUtil;
 import com.dong.dongaicodegenerator.ai.model.MultiFileCodeResult;
 import com.dong.dongaicodegenerator.exception.BusinessException;
 import com.dong.dongaicodegenerator.exception.ErrorCode;
@@ -14,6 +15,9 @@ public class MultiFileCodeSaverTemplate extends CodeFileSaverTemplate<MultiFileC
         boolean flag = paraValidation(result);
         if (!flag) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "保存多文件代码文件参数异常");
+        }
+        if (ObjectUtil.isNull(codeGenTypeEnum)) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "代码类型为空");
         }
         String uniqueDir = buildUniqueDir(CodeGenTypeEnum.MULTI_FILE);
         writeToFile(uniqueDir, "index.html", result.getHtmlCode());
