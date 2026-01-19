@@ -9,6 +9,8 @@ import com.dong.dongaicodegenerator.exception.BusinessException;
 import com.dong.dongaicodegenerator.exception.ErrorCode;
 import com.dong.dongaicodegenerator.exception.ThrowUtils;
 import com.dong.dongaicodegenerator.model.enums.CodeGenTypeEnum;
+import com.dong.dongaicodegenerator.parser.CodeParserExecutor;
+import com.dong.dongaicodegenerator.saver.CodeFileSaverExecutor;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -27,37 +29,83 @@ public class AiCodeGeneratorFacade {
     @Resource
     private AiCodeGeneratorService aiCodeGeneratorService;
 
+//    /**
+//     * 生成代码功能的统一入口，根据类型生成并保存文件
+//     * @param userMessage
+//     * @param codeGenTypeEnum
+//     * @return
+//     */
+//    public File generateAndSaveCode(String userMessage, CodeGenTypeEnum codeGenTypeEnum) {
+//        ThrowUtils.throwIf(ObjectUtil.isNull(codeGenTypeEnum), ErrorCode.PARAMS_ERROR, "生成类型不能为空");
+//        return switch (codeGenTypeEnum) {
+//            case HTML -> generateAndSaveHtmlCode(userMessage);
+//            case MULTI_FILE -> generateAndSaveMultiFleCode(userMessage);
+//            default -> {
+//                throw new BusinessException(ErrorCode.OPERATION_ERROR, "生成类型错误");
+//            }
+//        };
+//    }
+//
+//    /**
+//     * 流式生成代码功能的统一入口，根据类型生成并保存文件
+//     * @param userMessage
+//     * @param codeGenTypeEnum
+//     * @return
+//     */
+//    public Flux<String> generateAndSaveCodeWithStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum) {
+//        ThrowUtils.throwIf(ObjectUtil.isNull(codeGenTypeEnum), ErrorCode.PARAMS_ERROR, "生成类型不能为空");
+//        if (codeGenTypeEnum.equals(CodeGenTypeEnum.HTML)) {
+//            return generateHtmlCodeWithStream(userMessage);
+//        } else if (codeGenTypeEnum.equals(CodeGenTypeEnum.MULTI_FILE)) {
+//            return generateMultiFileCodeWithStream(userMessage);
+//        } else {
+//            throw new BusinessException(ErrorCode.OPERATION_ERROR, "生成类型错误");
+//        }
+//    }
+
     /**
-     * 生成代码功能的统一入口，根据类型生成并保存文件
-     * @param userMessage
+     * 生成代码并保存文件的统一入口
+     * @param prompt
      * @param codeGenTypeEnum
      * @return
      */
-    public File generateAndSaveCode(String userMessage, CodeGenTypeEnum codeGenTypeEnum) {
-        ThrowUtils.throwIf(ObjectUtil.isNull(codeGenTypeEnum), ErrorCode.PARAMS_ERROR, "生成类型不能为空");
+    public File generateCodeAndSave(String prompt, CodeGenTypeEnum codeGenTypeEnum) {
+        if (StrUtil.isBlank(prompt) || ObjectUtil.isNull(codeGenTypeEnum)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数异常，提示词或代码生成类型不能为空");
+        }
         return switch (codeGenTypeEnum) {
-            case HTML -> generateAndSaveHtmlCode(userMessage);
-            case MULTI_FILE -> generateAndSaveMultiFleCode(userMessage);
+            case HTML -> {
+                HtmlCodeResult htmlCodeResult = aiCodeGeneratorService.generateHtmlCode(prompt);
+                yield CodeFileSaverExecutor.saveCodeFileExecutor(htmlCodeResult, CodeGenTypeEnum.HTML);
+            }
+            case MULTI_FILE ->  {
+                MultiFileCodeResult multiFileCodeResult = aiCodeGeneratorService.generateMultiFleCode(prompt);
+                yield CodeFileSaverExecutor.saveCodeFileExecutor(multiFileCodeResult, CodeGenTypeEnum.MULTI_FILE);
+            }
             default -> {
-                throw new BusinessException(ErrorCode.OPERATION_ERROR, "生成类型错误");
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "不支持的代码生成类型：" + codeGenTypeEnum);
             }
         };
     }
 
     /**
-     * 流式生成代码功能的统一入口，根据类型生成并保存文件
-     * @param userMessage
+     * 流式生成代码并保存文件的统一入口
+     * @param prompt
      * @param codeGenTypeEnum
      * @return
      */
-    public Flux<String> generateAndSaveCodeWithStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum) {
-        ThrowUtils.throwIf(ObjectUtil.isNull(codeGenTypeEnum), ErrorCode.PARAMS_ERROR, "生成类型不能为空");
+    public Flux<String> generateCodeAndSaveWithStream(String prompt, CodeGenTypeEnum codeGenTypeEnum) {
+        if (StrUtil.isBlank(prompt) || ObjectUtil.isNull(codeGenTypeEnum)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数异常，提示词或代码生成类型不能为空");
+        }
         if (codeGenTypeEnum.equals(CodeGenTypeEnum.HTML)) {
-            return generateHtmlCodeWithStream(userMessage);
+            Flux<String> htmlCodeStream = aiCodeGeneratorService.generateHtmlCodeStream(prompt);
+            return processCodeGenerationStream(htmlCodeStream, CodeGenTypeEnum.HTML);
         } else if (codeGenTypeEnum.equals(CodeGenTypeEnum.MULTI_FILE)) {
-            return generateMultiFileCodeWithStream(userMessage);
+            Flux<String> multiFileCodeStream = aiCodeGeneratorService.generateMultiFileCodeStream(prompt);
+            return processCodeGenerationStream(multiFileCodeStream, CodeGenTypeEnum.MULTI_FILE);
         } else {
-            throw new BusinessException(ErrorCode.OPERATION_ERROR, "生成类型错误");
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "不支持的代码生成类型：" + codeGenTypeEnum);
         }
     }
 
@@ -130,5 +178,38 @@ public class AiCodeGeneratorFacade {
                 }
             }
         });
+    }
+
+    /**
+     * 通用处理代码生成流
+     * @param codeGenerationFlux
+     * @param codeGenTypeEnum
+     * @return
+     */
+    private Flux<String> processCodeGenerationStream(Flux<String> codeGenerationFlux, CodeGenTypeEnum codeGenTypeEnum) {
+        if (ObjectUtil.isNull(codeGenTypeEnum)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "代码生成类型不能为空");
+        }
+        StringBuilder codeBuilder = new StringBuilder();
+        return codeGenerationFlux
+                .doOnNext(new Consumer<String>() {
+                    @Override
+                    public void accept(String s) {
+                        codeBuilder.append(s);
+                    }
+                })
+                .doOnComplete(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            String completedCode = codeBuilder.toString();
+                            Object codeResult = CodeParserExecutor.executeCodeParser(completedCode, codeGenTypeEnum);
+                            File codeFile = CodeFileSaverExecutor.saveCodeFileExecutor(codeResult, codeGenTypeEnum);
+                            log.info("代码文件保存成功：" + codeFile.getAbsolutePath());
+                        } catch (Exception e) {
+                            log.error("代码文件保存失败", e);
+                        }
+                    }
+                });
     }
 }
