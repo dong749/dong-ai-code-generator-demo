@@ -90,7 +90,7 @@ public interface UserService extends IService<User> {
     List<UserVO> getUserVOList(List<User> users);
 
     /**
-     * 根据查询条件构造数据查询的QueryWrapper对象
+     * 根据查询条件构造数据查询的 QueryWrapper 对象
      *
      * @param userQueryRequest
      * @return
