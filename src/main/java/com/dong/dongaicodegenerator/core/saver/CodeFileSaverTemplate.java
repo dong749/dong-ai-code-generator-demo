@@ -21,7 +21,7 @@ public abstract class CodeFileSaverTemplate<T> {
      * @param result
      * @param codeGenTypeEnum
      */
-    protected abstract File doSaveCodeFile(T result, CodeGenTypeEnum codeGenTypeEnum);
+    protected abstract File doSaveCodeFile(T result, CodeGenTypeEnum codeGenTypeEnum, Long appId);
 
     /**
      * 参数校验
@@ -38,12 +38,12 @@ public abstract class CodeFileSaverTemplate<T> {
      * @param codeGenTypeEnum
      * @return
      */
-    public final File saveCodeFile(T result, CodeGenTypeEnum codeGenTypeEnum) {
+    public final File saveCodeFile(T result, Long appId, CodeGenTypeEnum codeGenTypeEnum) {
         if (!paraValidation(result)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "保存代码文件参数异常");
         }
-        String dirPath = buildUniqueDir(codeGenTypeEnum);
-        doSaveCodeFile(result, codeGenTypeEnum);
+        String dirPath = buildUniqueDir(codeGenTypeEnum, appId);
+        doSaveCodeFile(result, codeGenTypeEnum, appId);
         return new File(dirPath);
     }
 
@@ -52,8 +52,8 @@ public abstract class CodeFileSaverTemplate<T> {
      * @param
      * @return
      */
-    protected String buildUniqueDir(CodeGenTypeEnum codeGenTypeEnum) {
-        String dirName = StrUtil.format("{}_{}", codeGenTypeEnum.getValue(), IdUtil.getSnowflakeNextIdStr());
+    protected String buildUniqueDir(CodeGenTypeEnum codeGenTypeEnum, Long appId) {
+        String dirName = StrUtil.format("{}_{}", codeGenTypeEnum.getValue(), appId);
         String dirPath = FILE_SAVE_ROOT_DIR + File.separator + dirName;
         FileUtil.mkdir(dirPath);
         return dirPath;

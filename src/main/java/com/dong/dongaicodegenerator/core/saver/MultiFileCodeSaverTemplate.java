@@ -11,7 +11,7 @@ import java.io.File;
 public class MultiFileCodeSaverTemplate extends CodeFileSaverTemplate<MultiFileCodeResult>{
 
     @Override
-    protected File doSaveCodeFile(MultiFileCodeResult result, CodeGenTypeEnum codeGenTypeEnum) {
+    protected File doSaveCodeFile(MultiFileCodeResult result, CodeGenTypeEnum codeGenTypeEnum, Long appId) {
         boolean flag = paraValidation(result);
         if (!flag) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "保存多文件代码文件参数异常");
@@ -19,7 +19,7 @@ public class MultiFileCodeSaverTemplate extends CodeFileSaverTemplate<MultiFileC
         if (ObjectUtil.isNull(codeGenTypeEnum)) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "代码类型为空");
         }
-        String uniqueDir = buildUniqueDir(CodeGenTypeEnum.MULTI_FILE);
+        String uniqueDir = buildUniqueDir(CodeGenTypeEnum.MULTI_FILE, appId);
         writeToFile(uniqueDir, "index.html", result.getHtmlCode());
         writeToFile(uniqueDir, "style.css", result.getCssCode());
         writeToFile(uniqueDir, "script.js", result.getJsCode());

@@ -12,7 +12,7 @@ import java.io.File;
 public class HtmlCodeSaverTemplate extends CodeFileSaverTemplate<HtmlCodeResult> {
 
     @Override
-    protected File doSaveCodeFile(HtmlCodeResult result, CodeGenTypeEnum codeGenTypeEnum) {
+    protected File doSaveCodeFile(HtmlCodeResult result, CodeGenTypeEnum codeGenTypeEnum, Long appId) {
         boolean flag = paraValidation(result);
         if (!flag) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "保存 HTML 代码文件参数异常");
@@ -20,7 +20,7 @@ public class HtmlCodeSaverTemplate extends CodeFileSaverTemplate<HtmlCodeResult>
         if (ObjectUtil.isNull(codeGenTypeEnum)) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "代码类型为空");
         }
-        String uniqueDir = buildUniqueDir(CodeGenTypeEnum.HTML);
+        String uniqueDir = buildUniqueDir(CodeGenTypeEnum.HTML, appId);
         writeToFile(uniqueDir, "index.html", result.getHtmlCode());
         return new File(uniqueDir);
     }
