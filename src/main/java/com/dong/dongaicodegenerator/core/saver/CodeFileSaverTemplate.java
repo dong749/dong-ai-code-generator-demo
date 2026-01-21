@@ -4,6 +4,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
+import com.dong.dongaicodegenerator.constant.AppConstant;
 import com.dong.dongaicodegenerator.exception.BusinessException;
 import com.dong.dongaicodegenerator.exception.ErrorCode;
 import com.dong.dongaicodegenerator.model.enums.CodeGenTypeEnum;
@@ -14,7 +15,10 @@ import java.nio.charset.StandardCharsets;
 public abstract class CodeFileSaverTemplate<T> {
 
     // 文件保存的根目录
-    private static final String FILE_SAVE_ROOT_DIR = System.getProperty("user.dir") + "/temp/code_output";
+    // private static final String FILE_SAVE_ROOT_DIR = System.getProperty("user.dir") + "/temp/code_output";
+    // 文件保存根目录
+    protected static final String FILE_SAVE_ROOT_DIR = AppConstant.CODE_OUTPUT_ROOT_DIR;
+
 
     /**
      * 具体保存代码文件的实现方法
