@@ -3,6 +3,7 @@ package com.dong.dongaicodegenerator.controller;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.dong.dongaicodegenerator.annotation.AuthCheck;
 import com.dong.dongaicodegenerator.common.BaseResponse;
 import com.dong.dongaicodegenerator.common.DeleteRequest;
@@ -25,20 +26,20 @@ import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
+import lombok.Getter;
+import org.springframework.http.MediaType;
+import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import com.dong.dongaicodegenerator.model.entity.App;
 import com.dong.dongaicodegenerator.service.AppService;
-import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 
 /**
  * 应用 控制层。
@@ -280,6 +281,39 @@ public class AppController {
         ThrowUtils.throwIf(app == null, ErrorCode.NOT_FOUND_ERROR);
         // 获取封装类
         return ResultUtils.success(appService.getAppVO(app));
+    }
+
+
+    /**
+     * 使用 AI 模型进行代码生成对话，返回流式响应。
+     *
+     * @param prompt  用户提示词
+     * @param appId   应用 ID
+     * @param request HTTP 请求
+     * @return 流式字符串响应
+     */
+    @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> chatWithModelForGenerateCode(@RequestParam String prompt
+            , @RequestParam Long appId, HttpServletRequest request) {
+        ThrowUtils.throwIf(StrUtil.isBlank(prompt), ErrorCode.PARAMS_ERROR, "提示词不能为空");
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        User loginUser = userService.getLoginUser(request);
+        Flux<String> generatedCodeFlux = appService.chatWithModelForGenerateCode(prompt, appId, loginUser);
+        return generatedCodeFlux.map(new Function<String, ServerSentEvent<String>>() {
+            @Override
+            public ServerSentEvent<String> apply(String codeChunk) {
+                Map<String, String> wrapper = Map.of("d", codeChunk);
+                String jsonStr = JSONUtil.toJsonStr(wrapper);
+                return ServerSentEvent.<String>builder()
+                        .data(jsonStr)
+                        .build();
+            }
+        }).concatWith(Mono.just(
+                ServerSentEvent.<String>builder()
+                        .event("done")
+                        .data("")
+                        .build(
+        )));
     }
 
 

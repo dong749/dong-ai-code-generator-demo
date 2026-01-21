@@ -2,10 +2,14 @@ package com.dong.dongaicodegenerator.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.ObjectUtil;
+import cn.hutool.core.util.StrUtil;
+import com.dong.dongaicodegenerator.core.AiCodeGeneratorFacade;
+import com.dong.dongaicodegenerator.exception.BusinessException;
 import com.dong.dongaicodegenerator.exception.ErrorCode;
 import com.dong.dongaicodegenerator.exception.ThrowUtils;
 import com.dong.dongaicodegenerator.model.dto.AppQueryRequest;
 import com.dong.dongaicodegenerator.model.entity.User;
+import com.dong.dongaicodegenerator.model.enums.CodeGenTypeEnum;
 import com.dong.dongaicodegenerator.model.vo.AppVO;
 import com.dong.dongaicodegenerator.model.vo.UserVO;
 import com.dong.dongaicodegenerator.service.UserService;
@@ -15,7 +19,9 @@ import com.dong.dongaicodegenerator.model.entity.App;
 import com.dong.dongaicodegenerator.mapper.AppMapper;
 import com.dong.dongaicodegenerator.service.AppService;
 import jakarta.annotation.Resource;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +40,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
 
     @Resource
     private UserService userService;
+    @Resource
+    private AiCodeGeneratorFacade aiCodeGeneratorFacade;
 
     /**
      * 根据 App 实体获取 AppVO。
@@ -121,6 +129,30 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
                 return appVO;
             }
         }).collect(Collectors.toList());
+    }
+
+
+    /**
+     * 调用 AI 模型进行代码生成
+     *
+     * @param prompt    提示词
+     * @param appId     应用 ID
+     * @param loginUser 登录用户
+     * @return 代码生成结果流
+     */
+    @Override
+    public Flux<String> chatWithModelForGenerateCode(String prompt, Long appId, User loginUser) {
+        ThrowUtils.throwIf(StrUtil.isBlank(prompt), ErrorCode.PARAMS_ERROR, "提示词不能为空");
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(ObjectUtil.isNull(app), ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        if (!app.getUserId().equals(loginUser.getId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限操作该应用");
+        }
+        String codeGenType = app.getCodeGenType();
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
+        ThrowUtils.throwIf(ObjectUtil.isNull(codeGenTypeEnum), ErrorCode.PARAMS_ERROR, "不支持的代码生成类型：" + codeGenType);
+        return aiCodeGeneratorFacade.generateCodeAndSaveWithStream(prompt, codeGenTypeEnum, appId);
     }
 
 

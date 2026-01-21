@@ -2,11 +2,13 @@ package com.dong.dongaicodegenerator.service;
 
 import com.dong.dongaicodegenerator.model.dto.AppAddRequest;
 import com.dong.dongaicodegenerator.model.dto.AppQueryRequest;
+import com.dong.dongaicodegenerator.model.entity.User;
 import com.dong.dongaicodegenerator.model.vo.AppVO;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.core.service.IService;
 import com.dong.dongaicodegenerator.model.entity.App;
 import jakarta.servlet.http.HttpServletRequest;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -40,4 +42,13 @@ public interface AppService extends IService<App> {
      * @return 应用视图对象列表
      */
     List<AppVO> getAppVOList(List<App> appList);
+
+
+    /**
+     * 调用 AI 模型进行代码生成
+     * @param prompt
+     * @param loginUser
+     * @param appId
+     */
+    Flux<String> chatWithModelForGenerateCode(String prompt, Long appId, User loginUser);
 }
