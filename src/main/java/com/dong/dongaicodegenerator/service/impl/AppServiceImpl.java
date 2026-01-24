@@ -12,9 +12,11 @@ import com.dong.dongaicodegenerator.exception.ErrorCode;
 import com.dong.dongaicodegenerator.exception.ThrowUtils;
 import com.dong.dongaicodegenerator.model.dto.AppQueryRequest;
 import com.dong.dongaicodegenerator.model.entity.User;
+import com.dong.dongaicodegenerator.model.enums.ChatHistoryMessageTypeEnum;
 import com.dong.dongaicodegenerator.model.enums.CodeGenTypeEnum;
 import com.dong.dongaicodegenerator.model.vo.AppVO;
 import com.dong.dongaicodegenerator.model.vo.UserVO;
+import com.dong.dongaicodegenerator.service.ChatHistoryService;
 import com.dong.dongaicodegenerator.service.UserService;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
@@ -22,13 +24,17 @@ import com.dong.dongaicodegenerator.model.entity.App;
 import com.dong.dongaicodegenerator.mapper.AppMapper;
 import com.dong.dongaicodegenerator.service.AppService;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -38,12 +44,15 @@ import java.util.stream.Collectors;
  * @author <a href="https://github.com/dong749">Dong</a>
  */
 @Service
+@Slf4j
 public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppService{
 
     @Resource
     private UserService userService;
     @Resource
     private AiCodeGeneratorFacade aiCodeGeneratorFacade;
+    @Resource
+    private ChatHistoryService chatHistoryService;
 
     /**
      * 根据 App 实体获取 AppVO。
@@ -156,7 +165,33 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         String codeGenType = app.getCodeGenType();
         CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
         ThrowUtils.throwIf(ObjectUtil.isNull(codeGenTypeEnum), ErrorCode.PARAMS_ERROR, "不支持的代码生成类型：" + codeGenType);
-        return aiCodeGeneratorFacade.generateCodeAndSaveWithStream(prompt, codeGenTypeEnum, appId);
+        // 调用 AI 之前先保存用户消息
+        chatHistoryService.addChatHistory(appId, prompt, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
+        // 调用 AI 进行代码生成，并以流式方式返回结果
+        Flux<String> contentFlux = aiCodeGeneratorFacade.generateCodeAndSaveWithStream(prompt, codeGenTypeEnum, appId);
+        // 收集 AI 的完整相应内容，并且在流处理完成后保存 AI 回复的消息
+        StringBuilder aiResponseBuilder = new StringBuilder();
+        return contentFlux.doOnNext(new Consumer<String>() {
+            @Override
+            public void accept(String s) {
+                // 实时收集 AI 响应内容
+                aiResponseBuilder.append(s);
+            }
+        }).doOnComplete(new Runnable() {
+            // 流式返回完成后，保存 AI 回复的消息
+            @Override
+            public void run() {
+                String aiResponseBuilderString = aiResponseBuilder.toString();
+                chatHistoryService.addChatHistory(appId, aiResponseBuilderString, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+            }
+        }).doOnError(new Consumer<Throwable>() {
+            // 即使流式返回发生错误时，也需要保存 AI 回复的消息
+            @Override
+            public void accept(Throwable throwable) {
+                String errorMessage = "AI 回复生成失败，错误信息：" + throwable.getMessage();
+                chatHistoryService.addChatHistory(appId, errorMessage, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
+            }
+        });
     }
 
 
@@ -203,5 +238,27 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         return String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
     }
 
-
+    /**
+     * 覆盖原本 Mybatis-Plus 原本的方法，根据 ID 删除应用，同时删除相关联的聊天记录
+     * @param id
+     * @return
+     */
+    @Override
+    @Transactional
+    public boolean removeById(Serializable id) {
+        if (id == null) {
+            return false;
+        }
+        long appId = Long.parseLong(id.toString());
+        if (appId <= 0) {
+            return false;
+        }
+        try {
+            chatHistoryService.deleteByAppId(appId);
+        } catch (Exception e) {
+            log.error("删除应用关联的聊天记录失败，应用 ID：" + appId, e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "删除应用关联的聊天记录失败");
+        }
+        return super.removeById(id);
+    }
 }
