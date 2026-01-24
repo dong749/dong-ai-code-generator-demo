@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -66,6 +67,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         return appVO;
     }
 
+
     /**
      * 获取查询包装器
      *
@@ -97,6 +99,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
                 .eq(App::getUserId, userId, ObjectUtil.isNotNull(userId))
                 .orderBy(sortField, "ascend".equals(sortOrder));
     }
+
 
     /**
      * 根据 App 列表获取 AppVO 对象列表。
@@ -156,10 +159,48 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         return aiCodeGeneratorFacade.generateCodeAndSaveWithStream(prompt, codeGenTypeEnum, appId);
     }
 
+
+    /**
+     * 部署应用
+     *
+     * @param appId     应用 ID
+     * @param loginUser 登录用户
+     * @return 部署访问地址
+     */
     @Override
     public String deployApp(Long appId, User loginUser) {
-
-        return "";
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用 ID 不能为空");
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(ObjectUtil.isNull(app), ErrorCode.NOT_FOUND_ERROR, "应用不存在");
+        if (!app.getUserId().equals(loginUser.getId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "无权限操作该应用");
+        }
+        String deployKey = app.getDeployKey();
+        if (StrUtil.isBlank(deployKey)) {
+            deployKey = RandomUtil.randomString(6);
+        }
+        String codeGenType = app.getCodeGenType();
+        String sourceDirName = codeGenType + "_" + appId;
+        String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
+        File sourceFile = new File(sourceDirPath);
+        if (!sourceFile.exists() || !sourceFile.isDirectory()) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用代码文件不存在，无法部署");
+        }
+        String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;
+        try {
+            // 从code_output目录复制文件到code_deploy目录
+            File deployFile = new File(deployDirPath);
+            FileUtil.copyContent(sourceFile, deployFile, true);
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用部署失败，发生异常：" + e.getMessage());
+        }
+        App updatedApp = new App();
+        updatedApp.setId(appId);
+        updatedApp.setDeployKey(deployKey);
+        updatedApp.setDeployedTime(LocalDateTime.now());
+        boolean updated = this.updateById(updatedApp);
+        ThrowUtils.throwIf(!updated, ErrorCode.OPERATION_ERROR, "应用部署信息更新失败");
+        return String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
     }
 
 
