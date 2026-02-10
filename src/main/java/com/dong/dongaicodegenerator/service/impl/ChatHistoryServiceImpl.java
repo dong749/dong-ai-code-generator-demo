@@ -1,5 +1,6 @@
 package com.dong.dongaicodegenerator.service.impl;
 
+import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import com.dong.dongaicodegenerator.constant.UserConstant;
@@ -16,11 +17,16 @@ import com.mybatisflex.spring.service.impl.ServiceImpl;
 import com.dong.dongaicodegenerator.model.entity.ChatHistory;
 import com.dong.dongaicodegenerator.mapper.ChatHistoryMapper;
 import com.dong.dongaicodegenerator.service.ChatHistoryService;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.UserMessage;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 对话历史 服务层实现。
@@ -28,6 +34,7 @@ import java.time.LocalDateTime;
  * @author <a href="https://github.com/dong749">Dong</a>
  */
 @Service
+@Slf4j
 public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatHistory>  implements ChatHistoryService{
 
     @Resource
@@ -131,4 +138,43 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
     }
 
 
+    /**
+     * 将聊天历史加载到内存中，按照时间顺序加载，确保用户和AI消息交替添加到内存中
+     * @param appId
+     * @param chatMemory
+     * @param maxHistoryNum
+     * @return
+     */
+    @Override
+    public int loadChatHistoryToMemory(Long appId, MessageWindowChatMemory chatMemory, int maxHistoryNum) {
+        try {
+            QueryWrapper queryWrapper = QueryWrapper.create()
+                    .eq(ChatHistory::getAppId, appId)
+                    .orderBy(ChatHistory::getCreateTime, false)
+                    .limit(1, maxHistoryNum); // 防止重复加载第一条消息
+            List<ChatHistory> chatHistories = this.list(queryWrapper);
+            if (CollectionUtil.isEmpty(chatHistories)) {
+                return 0;
+            }
+            // 将 chatHistories 列表反转，确保按照时间顺序将消息添加到内存中
+            chatHistories = chatHistories.reversed();
+            int loadedCount = 0;
+            // 清理历史缓存，防止重复加载
+            chatMemory.clear();
+            // 将聊天记录按照时间顺序添加到内存中
+            for (ChatHistory chatHistory : chatHistories) {
+                if (ChatHistoryMessageTypeEnum.USER.getValue().equals(chatHistory.getMessageType())) {
+                    chatMemory.add(UserMessage.from(chatHistory.getMessage()));
+                } else if (ChatHistoryMessageTypeEnum.AI.getValue().equals(chatHistory.getMessageType())) {
+                    chatMemory.add(AiMessage.from(chatHistory.getMessage()));
+                }
+                loadedCount++;
+            }
+            log.info("已加载 {} 条聊天记录到内存中", loadedCount);
+            return loadedCount;
+        } catch (Exception e) {
+            log.error("加载聊天历史到内存失败, appId={}, error={}", appId, e.getMessage());
+            return 0;
+        }
+    }
 }

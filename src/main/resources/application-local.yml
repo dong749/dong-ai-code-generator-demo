@@ -18,3 +18,16 @@ langchain4j:
       strict-json-schema: true
       log-requests: true
       log-responses: true
+
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 1234
+      ttl: 3600
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://nj-cdb-q2e7tatj.sql.tencentcdb.com:25427/dong_ai_code_generator?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: 745769842Rx!

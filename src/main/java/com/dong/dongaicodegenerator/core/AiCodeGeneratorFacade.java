@@ -3,6 +3,7 @@ package com.dong.dongaicodegenerator.core;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import com.dong.dongaicodegenerator.ai.AiCodeGeneratorService;
+import com.dong.dongaicodegenerator.ai.AiCodeGeneratorServiceFactory;
 import com.dong.dongaicodegenerator.ai.model.HtmlCodeResult;
 import com.dong.dongaicodegenerator.ai.model.MultiFileCodeResult;
 import com.dong.dongaicodegenerator.exception.BusinessException;
@@ -26,7 +27,7 @@ import java.util.function.Consumer;
 public class AiCodeGeneratorFacade {
 
     @Resource
-    private AiCodeGeneratorService aiCodeGeneratorService;
+    private AiCodeGeneratorServiceFactory aiCodeGeneratorServiceFactory;
 
     /**
      * 生成代码并保存文件的统一入口
@@ -38,6 +39,8 @@ public class AiCodeGeneratorFacade {
         if (StrUtil.isBlank(prompt) || ObjectUtil.isNull(codeGenTypeEnum)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数异常，提示词或代码生成类型不能为空");
         }
+        // 根据 appId 获取对应的 AiCodeGeneratorService 服务实例
+        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId);
         return switch (codeGenTypeEnum) {
             case HTML -> {
                 HtmlCodeResult htmlCodeResult = aiCodeGeneratorService.generateHtmlCode(prompt);
@@ -63,6 +66,7 @@ public class AiCodeGeneratorFacade {
         if (StrUtil.isBlank(prompt) || ObjectUtil.isNull(codeGenTypeEnum)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数异常，提示词或代码生成类型不能为空");
         }
+        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId);
         if (codeGenTypeEnum.equals(CodeGenTypeEnum.HTML)) {
             Flux<String> htmlCodeStream = aiCodeGeneratorService.generateHtmlCodeStream(prompt);
             return processCodeGenerationStream(htmlCodeStream, CodeGenTypeEnum.HTML, appId);
