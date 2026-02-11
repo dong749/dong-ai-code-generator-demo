@@ -3,10 +3,17 @@ spring:
     name: dong-ai-code-generator-backend
   profiles:
     active: local
+  session:
+    store-type: redis
+    timeout: 2592000 # 30天
 server:
   port: 8123
   servlet:
     context-path: /api
+    # cookie 30 天过期
+    session:
+      cookie:
+        max-age: 2592000 # 30天
 
 # springdoc-openapi
 springdoc:
