@@ -2,15 +2,22 @@ package com.dong.dongaicodegenerator.core;
 
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.dong.dongaicodegenerator.ai.AiCodeGeneratorService;
 import com.dong.dongaicodegenerator.ai.AiCodeGeneratorServiceFactory;
 import com.dong.dongaicodegenerator.ai.model.HtmlCodeResult;
 import com.dong.dongaicodegenerator.ai.model.MultiFileCodeResult;
+import com.dong.dongaicodegenerator.ai.model.message.AiResponseMessage;
+import com.dong.dongaicodegenerator.ai.model.message.ToolExecutedMessage;
+import com.dong.dongaicodegenerator.ai.model.message.ToolRequestMessage;
 import com.dong.dongaicodegenerator.exception.BusinessException;
 import com.dong.dongaicodegenerator.exception.ErrorCode;
 import com.dong.dongaicodegenerator.model.enums.CodeGenTypeEnum;
 import com.dong.dongaicodegenerator.core.parser.CodeParserExecutor;
 import com.dong.dongaicodegenerator.core.saver.CodeFileSaverExecutor;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.service.TokenStream;
+import dev.langchain4j.service.tool.ToolExecution;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -73,8 +80,9 @@ public class AiCodeGeneratorFacade {
             Flux<String> htmlCodeStream = aiCodeGeneratorService.generateHtmlCodeStream(prompt);
             return processCodeGenerationStream(htmlCodeStream, CodeGenTypeEnum.HTML, appId);
         } else if (codeGenTypeEnum.equals(CodeGenTypeEnum.VUE_PROJECT)) {
-            Flux<String> vueProjectCodeStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, prompt);
-            return processCodeGenerationStream(vueProjectCodeStream, CodeGenTypeEnum.VUE_PROJECT, appId);
+            TokenStream generateVueProjectCodeStream = aiCodeGeneratorService
+                    .generateVueProjectCodeStream(appId, prompt);
+            return processTokenStream(generateVueProjectCodeStream);
         } else if (codeGenTypeEnum.equals(CodeGenTypeEnum.MULTI_FILE)) {
             Flux<String> multiFileCodeStream = aiCodeGeneratorService.generateMultiFileCodeStream(prompt);
             return processCodeGenerationStream(multiFileCodeStream, CodeGenTypeEnum.MULTI_FILE, appId);
@@ -114,6 +122,37 @@ public class AiCodeGeneratorFacade {
                         }
                     }
                 });
+    }
+
+    /**
+     * 将 TokenStream 转换为 Flux<String>，并传递工具调用信息
+     *
+     * @param tokenStream TokenStream 对象
+     * @return Flux<String> 流式响应
+     */
+    private Flux<String> processTokenStream(TokenStream tokenStream) {
+        return Flux.create(sink -> {
+            tokenStream.onPartialResponse((String partialResponse) -> {
+                        AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse);
+                        sink.next(JSONUtil.toJsonStr(aiResponseMessage));
+                    })
+                    .onPartialToolExecutionRequest((index, toolExecutionRequest) -> {
+                        ToolRequestMessage toolRequestMessage = new ToolRequestMessage(toolExecutionRequest);
+                        sink.next(JSONUtil.toJsonStr(toolRequestMessage));
+                    })
+                    .onToolExecuted((ToolExecution toolExecution) -> {
+                        ToolExecutedMessage toolExecutedMessage = new ToolExecutedMessage(toolExecution);
+                        sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
+                    })
+                    .onCompleteResponse((ChatResponse response) -> {
+                        sink.complete();
+                    })
+                    .onError((Throwable error) -> {
+                        error.printStackTrace();
+                        sink.error(error);
+                    })
+                    .start();
+        });
     }
 
 //    /**

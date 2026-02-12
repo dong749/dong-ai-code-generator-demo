@@ -71,7 +71,8 @@ public class AppController {
         BeanUtil.copyProperties(appAddRequest, app);
         app.setUserId(loginUser.getId());
         // 初始默认多文件生成
-        app.setCodeGenType(CodeGenTypeEnum.MULTI_FILE.getValue());
+        // app.setCodeGenType(CodeGenTypeEnum.MULTI_FILE.getValue());
+        app.setCodeGenType(CodeGenTypeEnum.VUE_PROJECT.getValue());
         // 取初始提示词的前12位为默认App名称
         app.setAppName(initPrompt.substring(0, Math.min(initPrompt.length(), 12)));
         boolean saved = appService.save(app);
