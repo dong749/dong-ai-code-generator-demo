@@ -40,7 +40,8 @@ public class AiCodeGeneratorFacade {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数异常，提示词或代码生成类型不能为空");
         }
         // 根据 appId 获取对应的 AiCodeGeneratorService 服务实例
-        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId);
+        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory
+                .getAiCodeGeneratorService(appId, codeGenTypeEnum);
         return switch (codeGenTypeEnum) {
             case HTML -> {
                 HtmlCodeResult htmlCodeResult = aiCodeGeneratorService.generateHtmlCode(prompt);
@@ -66,10 +67,14 @@ public class AiCodeGeneratorFacade {
         if (StrUtil.isBlank(prompt) || ObjectUtil.isNull(codeGenTypeEnum)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数异常，提示词或代码生成类型不能为空");
         }
-        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId);
+        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory
+                .getAiCodeGeneratorService(appId, codeGenTypeEnum);
         if (codeGenTypeEnum.equals(CodeGenTypeEnum.HTML)) {
             Flux<String> htmlCodeStream = aiCodeGeneratorService.generateHtmlCodeStream(prompt);
             return processCodeGenerationStream(htmlCodeStream, CodeGenTypeEnum.HTML, appId);
+        } else if (codeGenTypeEnum.equals(CodeGenTypeEnum.VUE_PROJECT)) {
+            Flux<String> vueProjectCodeStream = aiCodeGeneratorService.generateVueProjectCodeStream(appId, prompt);
+            return processCodeGenerationStream(vueProjectCodeStream, CodeGenTypeEnum.VUE_PROJECT, appId);
         } else if (codeGenTypeEnum.equals(CodeGenTypeEnum.MULTI_FILE)) {
             Flux<String> multiFileCodeStream = aiCodeGeneratorService.generateMultiFileCodeStream(prompt);
             return processCodeGenerationStream(multiFileCodeStream, CodeGenTypeEnum.MULTI_FILE, appId);
