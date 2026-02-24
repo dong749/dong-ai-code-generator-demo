@@ -7,6 +7,8 @@ import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.dong.dongaicodegenerator.constant.AppConstant;
 import com.dong.dongaicodegenerator.core.AiCodeGeneratorFacade;
+import com.dong.dongaicodegenerator.core.builder.VueProjectBuilder;
+import com.dong.dongaicodegenerator.core.handler.StreamHandlerExecutor;
 import com.dong.dongaicodegenerator.exception.BusinessException;
 import com.dong.dongaicodegenerator.exception.ErrorCode;
 import com.dong.dongaicodegenerator.exception.ThrowUtils;
@@ -53,6 +55,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
     private AiCodeGeneratorFacade aiCodeGeneratorFacade;
     @Resource
     private ChatHistoryService chatHistoryService;
+    @Resource
+    private StreamHandlerExecutor streamHandlerExecutor;
+    @Resource
+    private VueProjectBuilder vueProjectBuilder;
 
     /**
      * 根据 App 实体获取 AppVO。
@@ -170,28 +176,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         // 调用 AI 进行代码生成，并以流式方式返回结果
         Flux<String> contentFlux = aiCodeGeneratorFacade.generateCodeAndSaveWithStream(prompt, codeGenTypeEnum, appId);
         // 收集 AI 的完整相应内容，并且在流处理完成后保存 AI 回复的消息
-        StringBuilder aiResponseBuilder = new StringBuilder();
-        return contentFlux.doOnNext(new Consumer<String>() {
-            @Override
-            public void accept(String s) {
-                // 实时收集 AI 响应内容
-                aiResponseBuilder.append(s);
-            }
-        }).doOnComplete(new Runnable() {
-            // 流式返回完成后，保存 AI 回复的消息
-            @Override
-            public void run() {
-                String aiResponseBuilderString = aiResponseBuilder.toString();
-                chatHistoryService.addChatHistory(appId, aiResponseBuilderString, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
-            }
-        }).doOnError(new Consumer<Throwable>() {
-            // 即使流式返回发生错误时，也需要保存 AI 回复的消息
-            @Override
-            public void accept(Throwable throwable) {
-                String errorMessage = "AI 回复生成失败，错误信息：" + throwable.getMessage();
-                chatHistoryService.addChatHistory(appId, errorMessage, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
-            }
-        });
+        return streamHandlerExecutor.doExecute(contentFlux, chatHistoryService
+                , appId, loginUser, codeGenTypeEnum);
     }
 
 
@@ -221,6 +207,18 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         if (!sourceFile.exists() || !sourceFile.isDirectory()) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用代码文件不存在，无法部署");
         }
+
+        // 如果是 Vue 工程项目需要进行特殊的构建处理
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
+        if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
+            boolean isBuildCompleted = vueProjectBuilder.buildProject(sourceDirPath);
+            ThrowUtils.throwIf(!isBuildCompleted, ErrorCode.SYSTEM_ERROR, "Vue 项目构建失败，无法部署");
+            File distDir = new File(sourceDirPath, "dist");
+            ThrowUtils.throwIf(!distDir.exists() || !distDir.isDirectory(), ErrorCode.SYSTEM_ERROR, "Vue 项目构建完成，但 dist 目录不存在，无法部署");
+            sourceFile = distDir;
+            log.info("Vue 项目构建完成，准备部署 dist 目录，路径：" + distDir.getAbsolutePath());
+        }
+
         String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;
         try {
             // 从code_output目录复制文件到code_deploy目录
