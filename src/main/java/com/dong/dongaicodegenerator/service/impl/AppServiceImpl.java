@@ -5,6 +5,7 @@ import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
+import com.dong.dongaicodegenerator.ai.AiCodeGenTypeRoutingService;
 import com.dong.dongaicodegenerator.constant.AppConstant;
 import com.dong.dongaicodegenerator.core.AiCodeGeneratorFacade;
 import com.dong.dongaicodegenerator.core.builder.VueProjectBuilder;
@@ -12,6 +13,7 @@ import com.dong.dongaicodegenerator.core.handler.StreamHandlerExecutor;
 import com.dong.dongaicodegenerator.exception.BusinessException;
 import com.dong.dongaicodegenerator.exception.ErrorCode;
 import com.dong.dongaicodegenerator.exception.ThrowUtils;
+import com.dong.dongaicodegenerator.model.dto.AppAddRequest;
 import com.dong.dongaicodegenerator.model.dto.AppQueryRequest;
 import com.dong.dongaicodegenerator.model.entity.User;
 import com.dong.dongaicodegenerator.model.enums.ChatHistoryMessageTypeEnum;
@@ -62,6 +64,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
     private VueProjectBuilder vueProjectBuilder;
     @Resource
     private ScreenshotService screenshotService;
+    @Resource
+    private AiCodeGenTypeRoutingService aiCodeGenTypeRoutingService;
 
     /**
      * 根据 App 实体获取 AppVO。
@@ -259,6 +263,29 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
                         , "更新应用截图 URL 失败");
             }
         });
+    }
+
+    /**
+     * 创建应用
+     *
+     * @param appAddRequest 创建请求
+     * @param loginUser     登录用户
+     * @return 新创建的应用 ID
+     */
+    @Override
+    public Long createApp(AppAddRequest appAddRequest, User loginUser) {
+        ThrowUtils.throwIf(ObjectUtil.isNull(appAddRequest), ErrorCode.PARAMS_ERROR, "应用创建请求不能为空");
+        String prompt = appAddRequest.getInitPrompt();
+        ThrowUtils.throwIf(StrUtil.isBlank(prompt), ErrorCode.PARAMS_ERROR, "初始提示词不能为空");
+        App app = new App();
+        BeanUtil.copyProperties(appAddRequest, app);
+        app.setUserId(loginUser.getId());
+        app.setAppName(prompt.substring(0, Math.min(prompt.length(), 12)));
+        CodeGenTypeEnum codeGenTypeEnum = aiCodeGenTypeRoutingService.routeCodeGenType(prompt);
+        app.setCodeGenType(codeGenTypeEnum.getValue());
+        boolean saved = this.save(app);
+        ThrowUtils.throwIf(!saved, ErrorCode.OPERATION_ERROR, "应用创建失败");
+        return app.getId();
     }
 
     /**

@@ -72,17 +72,8 @@ public class AppController {
         ThrowUtils.throwIf(StrUtil.isBlank(initPrompt), ErrorCode.PARAMS_ERROR, "初始化 prompt 不能为空");
         User loginUser = userService.getLoginUser(request);
         // 构造需要存储的对象
-        App app = new App();
-        BeanUtil.copyProperties(appAddRequest, app);
-        app.setUserId(loginUser.getId());
-        // 初始默认多文件生成
-        // app.setCodeGenType(CodeGenTypeEnum.MULTI_FILE.getValue());
-        app.setCodeGenType(CodeGenTypeEnum.VUE_PROJECT.getValue());
-        // 取初始提示词的前12位为默认App名称
-        app.setAppName(initPrompt.substring(0, Math.min(initPrompt.length(), 12)));
-        boolean saved = appService.save(app);
-        ThrowUtils.throwIf(!saved, ErrorCode.SYSTEM_ERROR, "应用保存失败");
-        return ResultUtils.success(app.getId());
+        Long appId = appService.createApp(appAddRequest, loginUser);
+        return ResultUtils.success(appId);
     }
 
 
