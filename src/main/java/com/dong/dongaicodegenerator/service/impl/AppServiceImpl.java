@@ -19,6 +19,7 @@ import com.dong.dongaicodegenerator.model.enums.CodeGenTypeEnum;
 import com.dong.dongaicodegenerator.model.vo.AppVO;
 import com.dong.dongaicodegenerator.model.vo.UserVO;
 import com.dong.dongaicodegenerator.service.ChatHistoryService;
+import com.dong.dongaicodegenerator.service.ScreenshotService;
 import com.dong.dongaicodegenerator.service.UserService;
 import com.mybatisflex.core.query.QueryWrapper;
 import com.mybatisflex.spring.service.impl.ServiceImpl;
@@ -59,6 +60,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
     private StreamHandlerExecutor streamHandlerExecutor;
     @Resource
     private VueProjectBuilder vueProjectBuilder;
+    @Resource
+    private ScreenshotService screenshotService;
 
     /**
      * 根据 App 实体获取 AppVO。
@@ -150,7 +153,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         }).collect(Collectors.toList());
     }
 
-
     /**
      * 调用 AI 模型进行代码生成
      *
@@ -179,7 +181,6 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         return streamHandlerExecutor.doExecute(contentFlux, chatHistoryService
                 , appId, loginUser, codeGenTypeEnum);
     }
-
 
     /**
      * 部署应用
@@ -233,7 +234,31 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>  implements AppS
         updatedApp.setDeployedTime(LocalDateTime.now());
         boolean updated = this.updateById(updatedApp);
         ThrowUtils.throwIf(!updated, ErrorCode.OPERATION_ERROR, "应用部署信息更新失败");
-        return String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
+        String deployUrl =  String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
+        generateAndUploadScreenshotAsync(appId, deployUrl);
+        return deployUrl;
+    }
+
+    /**
+     * 异步生成应用截图并更新封面
+     *
+     * @param appId  应用 ID
+     * @param webUrl 部署后的访问 URL
+     */
+    @Override
+    public void generateAndUploadScreenshotAsync(Long appId, String webUrl) {
+        Thread.startVirtualThread(new Runnable() {
+            @Override
+            public void run() {
+                String url = screenshotService.generateAndUploadScreenshot(webUrl);
+                App app = new App();
+                app.setId(appId);
+                app.setCover(url);
+                boolean updated = updateById(app);
+                ThrowUtils.throwIf(!updated, ErrorCode.OPERATION_ERROR
+                        , "更新应用截图 URL 失败");
+            }
+        });
     }
 
     /**

@@ -18,11 +18,13 @@ import com.dong.dongaicodegenerator.model.entity.User;
 import com.dong.dongaicodegenerator.model.enums.CodeGenTypeEnum;
 import com.dong.dongaicodegenerator.model.enums.UserRoleEnum;
 import com.dong.dongaicodegenerator.model.vo.AppVO;
+import com.dong.dongaicodegenerator.service.ProjectDownloadService;
 import com.dong.dongaicodegenerator.service.UserService;
 import com.mybatisflex.core.paginate.Page;
 import com.mybatisflex.core.query.QueryWrapper;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.Getter;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
@@ -33,6 +35,7 @@ import com.dong.dongaicodegenerator.service.AppService;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+import java.io.File;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +54,8 @@ public class AppController {
     private AppService appService;
     @Resource
     private UserService userService;
+    @Resource
+    private ProjectDownloadService projectDownloadService;
 
 
     /**
@@ -331,6 +336,35 @@ public class AppController {
         // 调用服务部署应用
         String deployUrl = appService.deployApp(appId, loginUser);
         return ResultUtils.success(deployUrl);
+    }
+
+
+    /**
+     * 下载应用代码
+     * @param appId
+     * @param request
+     * @param response
+     */
+    @GetMapping("/download")
+    public void downloadApp(Long appId, HttpServletRequest request, HttpServletResponse response) {
+        if (ObjectUtil.isNull(appId) || appId <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "App ID 不合法");
+        }
+        App app = appService.getById(appId);
+        ThrowUtils.throwIf(ObjectUtil.isNull(app), ErrorCode.NOT_FOUND_ERROR, "App 不存在");
+        User loginUser = userService.getLoginUser(request);
+        if (!app.getUserId().equals(loginUser.getId())) {
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "用户无权下载该 App");
+        }
+        String codeGenType = app.getCodeGenType();
+        String sourceDirName = codeGenType + "_" + appId;
+        String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
+        File sourceDir = new File(sourceDirPath);
+        if (!sourceDir.exists() || !sourceDir.isDirectory()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "目录不存在请先生成代码");
+        }
+        String downloadFileName = String.valueOf(appId);
+        projectDownloadService.downloadProjectAsZip(sourceDirPath, downloadFileName, response);
     }
 
 
